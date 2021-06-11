@@ -14,6 +14,8 @@ from sklearn.datasets import load_breast_cancer
 from sklearn.feature_selection import SelectKBest, chi2, f_regression, f_classif
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
+from multiprocessing.pool import Pool
+from multiprocessing import cpu_count
 
 output_notebook()
 init_notebook_mode(connected=True)
@@ -21,17 +23,31 @@ init_notebook_mode(connected=True)
 OBJECTIVE_REGRESSION = 1
 OBJECTIVE_CLASSIFICATION = 0
 
+
+def train_linear_model(args):
+    model_name, x, y, weights = args
+    lin_reg = LinearRegression()
+    lin_reg.fit(x, y, sample_weight=weights)
+    return model_name, lin_reg.score(x, y, sample_weight=weights)
+
+
 class Dominance:
     """docstring for ClassName"""
 
-    def __init__(self, data, target, top_k=None, objective=OBJECTIVE_REGRESSION, pseudo_r2='mcfadden', data_format=0):  # Bala changes
+    def __init__(self,
+                 data, target,
+                 sample_weight=None,
+                 top_k_features=15,
+                 objective=OBJECTIVE_REGRESSION,
+                 pseudo_r2='mcfadden',
+                 data_format=0):  # Bala changes
         """
 
         Args:
             data: Complete Dataset, should be a Pandas DataFrame.
             target: Name of the target variable, it should be present in passed dataset.
-            top_k: No. of features to choose from all available features. By default,
-                the package will run for top 15 features.
+            top_k_features: Number of features to choose from all available features, or list of features
+                to be used.
             objective: It can take value either 0 or 1. 0 for Classification and 1 for Regression.
                 By default, the package will run for Regression.
             pseudo_r2: It can take one of the Pseudo R-Squared measures - "mcfadden","nagelkerke",
@@ -47,15 +63,26 @@ class Dominance:
         self.data = data
         self.target = target
         self.objective = objective
+        self.sample_weight = sample_weight
         # Bala changes start
         self.data_format = data_format
         if (self.data_format == 0):
             # Bala changes end
-            if (self.objective == 0):
+            if (self.objective == OBJECTIVE_CLASSIFICATION):
                 self.data['intercept'] = 1
-            self.top_k = top_k if top_k else min((len(self.data.columns) - 1), 15)
+
+            if isinstance(top_k_features, int):
+                self.top_k_features = top_k_features if top_k_features else min((len(self.data.columns) - 1), 15)
+                assert self.top_k_features > 1 and self.top_k_features < len(self.data.columns), \
+                    "Value of top_k_features ranges from 1 to n-1 !"
+            elif isinstance(top_k_features, list):
+                self.top_k_features = top_k_features
+                assert all(x in self.data.columns for x in top_k_features), \
+                    "top_k_features must contain feature names!"
+            else:
+                raise TypeError('top_k must be integer or list of feature names!')
             self.pseudo_r2 = pseudo_r2
-            assert (self.top_k > 1) and (self.top_k < (len(self.data.columns))), "Value of top_k ranges from 1 to n-1 !"
+
         self.complete_model_rsquare()
 
     def conditional_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
@@ -184,14 +211,18 @@ class Dominance:
 
         model_combinations = self.model_features_combination(columns)
         model_rsquares = {}
-        if (self.objective == 1):
-            for i in tqdm(model_combinations):
-                for j in i:
-                    train_features = list(j)
-                    lin_reg = LinearRegression()
-                    lin_reg.fit(self.data[train_features], self.data[self.target])
-                    r_squared = lin_reg.score(self.data[list(j)], self.data[self.target])
-                    model_rsquares[" ".join(train_features)] = r_squared
+        if (self.objective == OBJECTIVE_REGRESSION):
+            with Pool(processes=cpu_count()) as pool:
+                for features_model_sizes in tqdm(model_combinations):
+                    features_model_sizes = [list(x) for x in features_model_sizes]
+                    model_names = [' '.join(x) for x in features_model_sizes]
+                    data_x = [self.data[x] for x in features_model_sizes]
+                    data_y = [self.data[self.target] for x in features_model_sizes]
+                    sample_weights = [self.sample_weight for x in features_model_sizes]
+
+                    for model_name, r2 in pool.imap_unordered(
+                            train_linear_model, zip(model_names, data_x, data_y, sample_weights)):
+                        model_rsquares[model_name] = r2
         else:
             for i in tqdm(model_combinations):
                 for j in i:
@@ -263,21 +294,26 @@ class Dominance:
         return tf
 
     def get_top_k(self):
-        columns = list(self.data.columns.values)
-        columns.remove(self.target)
+        if isinstance(self.top_k_features, list):
+            return self.top_k_features
+
+        columns = [x for x in self.data.columns.values if x != self.target]
         # remove intercept from top_k
-        if (self.objective):
-            top_k_vars = SelectKBest(f_regression, k=self.top_k)
+        if (self.objective == OBJECTIVE_REGRESSION):
+            top_k_vars = SelectKBest(f_regression, k=self.top_k_features)
             top_k_vars.fit_transform(self.data[columns], self.data[self.target])
         else:
             columns.remove('intercept')
             try:
-                top_k_vars = SelectKBest(chi2, k=self.top_k)
+                top_k_vars = SelectKBest(chi2, k=self.top_k_features)
                 top_k_vars.fit_transform(self.data[columns], self.data[self.target])
             except:
-                top_k_vars = SelectKBest(f_classif, k=self.top_k)
+                top_k_vars = SelectKBest(f_classif, k=self.top_k_features)
                 top_k_vars.fit_transform(self.data[columns], self.data[self.target])
-        return [columns[i] for i in top_k_vars.get_support(indices=True)]
+
+        top_k = [columns[i] for i in top_k_vars.get_support(indices=True)]
+        self.top_k_features = top_k
+        return top_k
 
     def plot_waterfall_relative_importance(self, incremental_rsquare_df):
         index = list(incremental_rsquare_df['Features'].values)
@@ -340,31 +376,30 @@ class Dominance:
         incremental_rsquare_df['percentage_incremental_r2'] = incremental_rsquare_df['percentage_incremental_r2'] * 100
         # Bala changes start
         if (self.data_format == 0):
-            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(asFigure=True,
-                                                                                                     kind='bar',
-                                                                                                     title="Incremetal " + (
-                                                                                                         "Pseudo " if (
-                                                                                                                 self.objective != 1) else " ") + "R Squared for Top " + str(
-                                                                                                         self.top_k) + " Variables ",
-                                                                                                     yTitle="Incremental R2",
-                                                                                                     xTitle="Estimators"))
-            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(asFigure=True, kind='pie',
-                                                                                          title="Percentage Relative Importance for Top " + str(
-                                                                                              self.top_k) + " Variables ",
-                                                                                          values="percentage_incremental_r2",
-                                                                                          labels="Features"))
+            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(
+                asFigure=True,
+                kind='bar',
+                title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") +
+                      "R Squared for Top " + str(self.top_k_features) + " Variables ",
+                yTitle="Incremental R2",
+                xTitle="Estimators"))
+            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(
+                asFigure=True, kind='pie',
+                title="Percentage Relative Importance for Top " + str(self.top_k_features) + " Variables ",
+                values="percentage_incremental_r2",
+                labels="Features"))
         else:
-            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(asFigure=True,
-                                                                                                     kind='bar',
-                                                                                                     title="Incremetal " + (
-                                                                                                         "Pseudo " if (
-                                                                                                                 self.objective != 1) else " ") + "R Squared of " + " Variables ",
-                                                                                                     yTitle="Incremental R2",
-                                                                                                     xTitle="Estimators"))
-            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(asFigure=True, kind='pie',
-                                                                                          title="Percentage Relative Importance of " + " Variables ",
-                                                                                          values="percentage_incremental_r2",
-                                                                                          labels="Features"))
+            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(
+                asFigure=True,
+                kind='bar',
+                title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") + "R Squared of " + " Variables ",
+                yTitle="Incremental R2",
+                xTitle="Estimators"))
+            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(
+                asFigure=True, kind='pie',
+                title="Percentage Relative Importance of " + " Variables ",
+                values="percentage_incremental_r2",
+                labels="Features"))
         # Bala changes end#Bala changes end
         self.plot_waterfall_relative_importance(incremental_rsquare_df[['Features', 'percentage_incremental_r2']])
 
@@ -476,10 +511,8 @@ class Dominance:
 
         ## Calculating Incremental R2 for Top_K_Variables
         if (self.data_format == 0):  # Bala changes
-            print("Selecting %s Best Predictors for the Model" % self.top_k)
             columns = self.get_top_k()
             print("Selected Predictors : ", columns)
-            print()
             print("Creating models for %s possible combinations of %s features :" % (
                 (2 ** len(columns)) - 1, len(columns)))
             model_rsquares = self.model_stats()
@@ -517,18 +550,21 @@ class Dominance:
         return incrimental_r2
 
     def complete_model_rsquare(self):
-        if (self.data_format == 0):  # Bala changes
-            print("Selecting %s Best Predictors for the Model" % self.top_k)
+        if self.data_format == 0:  # Bala changes
+            print("Selecting %s Best Predictors for the Model" % self.top_k_features)
             columns = self.get_top_k()
             print("Selected Predictors : ", columns)
             print()
 
-            if (self.objective == 1):
+            if self.objective == OBJECTIVE_REGRESSION:
                 print("*" * 20, " R-Squared of Complete Model : ", "*" * 20)
                 lin_reg = LinearRegression()
-                lin_reg.fit(self.data[columns], self.data[self.target])
-                r_squared = lin_reg.score(self.data[columns], self.data[self.target])
-                print("R Squared : %s" % (r_squared))
+                lin_reg.fit(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
+                r_squared = lin_reg.score(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
+                if self.sample_weight is not None:
+                    print("Weighted R2: %s" % (r_squared))
+                else:
+                    print("R2: %s" % (r_squared))
                 print()
             else:
                 print("*" * 20, " Pseudo R-Squared of Complete Model : ", "*" * 20)
