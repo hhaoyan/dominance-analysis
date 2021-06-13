@@ -87,36 +87,49 @@ class Dominance:
 
     def conditional_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
         # print("#"*25," Calculating Conditional Dominance ","#"*25)
-        total_model_r2 = model_rsquares[" ".join(model_features_k[0])]
+        all_features = model_features_k[0]
+        total_model_r2 = model_rsquares[" ".join(all_features)]
 
         interactional_comp_dom = {}
         for i in model_features_k_minus_1:
-            interactional_comp_dom[" ".join(set(model_features_k[0]) - set(i))] = {
+            interactional_comp_dom[" ".join(set(all_features) - set(i))] = {
                 " ".join(set(i)): total_model_r2 - model_rsquares[" ".join(i)]}
         # print("Interactional Dominance",interactional_comp_dom)
 
         interactional_dominance = dict(
-            {(" ".join(set(model_features_k[0]) - set(i)), total_model_r2 - model_rsquares[" ".join(i)]) for i in
-             model_features_k_minus_1})
-        return (interactional_dominance, interactional_comp_dom)
+            {(
+                " ".join(set(all_features) - set(i)),
+                total_model_r2 - model_rsquares[" ".join(i)]
+            ) for i in model_features_k_minus_1})
+        return interactional_dominance, interactional_comp_dom
 
     def individual_dominance(self, model_rsquares, model_features, columns):
         # print("#"*25," Calculating individual Dominance ","#"*25)
         return dict({(" ".join(col), model_rsquares[" ".join(col)]) for col in model_features})
 
     def partial_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
-        # print(columns)
         pd = {col: [] for col in columns}
-        [pd[" ".join(set(i) - set(j))].append(model_rsquares[" ".join(i)] - model_rsquares[" ".join(j)]) for i in
-         model_features_k for j in model_features_k_minus_1 if (len(set(i) - set(j)) == 1)]
+        model_features_k_set = [set(x) for x in model_features_k]
+        model_features_k_minus_1_set = [set(x) for x in model_features_k_minus_1]
+
+        for i, k_features in enumerate(model_features_k_set):
+            for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
+                add_k = k_features - k_minus1_features
+                if len(add_k) == 1:
+                    pd[next(add_k)].append(
+                        model_rsquares[" ".join(model_features_k[i])] -
+                        model_rsquares[" ".join(model_features_k_minus_1[j])])
 
         pd_comp_dom = {col: {} for col in columns}
 
-        for i in model_features_k:
-            for j in model_features_k_minus_1:
-                if (len(set(i) - set(j)) == 1):
-                    pd_comp_dom[" ".join(set(i) - set(j))].update({
-                        " ".join(j): model_rsquares[" ".join(i)] - model_rsquares[" ".join(j)]
+        for i, k_features in enumerate(model_features_k_set):
+            for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
+                add_k = k_features - k_minus1_features
+                if len(add_k) == 1:
+                    pd_comp_dom[next(add_k)].update({
+                        " ".join(model_features_k_minus_1[j]):
+                            model_rsquares[" ".join(model_features_k[i])] -
+                            model_rsquares[" ".join(model_features_k_minus_1[j])]
                     })
 
         # [pd_comp_dom[" ".join(set(i)-set(j))].append({" ".join(j):model_rsquares[" ".join(i)]-model_rsquares[" ".join(j)]}) for i in model_features_k for j in model_features_k_minus_1 if(len(set(i)-set(j))==1)]
@@ -216,8 +229,8 @@ class Dominance:
                 for features_model_sizes in tqdm(model_combinations):
                     features_model_sizes = [list(x) for x in features_model_sizes]
                     model_names = [' '.join(x) for x in features_model_sizes]
-                    data_x = [self.data[x] for x in features_model_sizes]
-                    data_y = [self.data[self.target] for x in features_model_sizes]
+                    data_x = [self.data[x].values for x in features_model_sizes]
+                    data_y = [self.data[self.target].values for x in features_model_sizes]
                     sample_weights = [self.sample_weight for x in features_model_sizes]
 
                     for model_name, r2 in pool.imap_unordered(
