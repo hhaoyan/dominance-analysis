@@ -119,27 +119,20 @@ class Dominance:
 
     def partial_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
         pd = {col: [] for col in columns}
+        pd_comp_dom = {col: {} for col in columns}
+
         model_features_k_set = [set(x) for x in model_features_k]
         model_features_k_minus_1_set = [set(x) for x in model_features_k_minus_1]
 
-        for i, k_features in enumerate(model_features_k_set):
-            for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
-                add_k = k_features - k_minus1_features
-                if len(add_k) == 1:
-                    pd[list(add_k)[0]].append(
-                        model_rsquares[" ".join(model_features_k[i])] -
-                        model_rsquares[" ".join(model_features_k_minus_1[j])])
-
-        pd_comp_dom = {col: {} for col in columns}
-
-        for i, k_features in enumerate(model_features_k_set):
-            for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
-                add_k = k_features - k_minus1_features
-                if len(add_k) == 1:
-                    pd_comp_dom[list(add_k)[0]].update({
-                        " ".join(model_features_k_minus_1[j]):
-                            model_rsquares[" ".join(model_features_k[i])] -
-                            model_rsquares[" ".join(model_features_k_minus_1[j])]
+        for k_minus1_features in model_features_k_minus_1_set:
+            model_name = " ".join(sorted(k_minus1_features))
+            model_r2 = model_rsquares[model_name]
+            for one_more in columns:
+                if one_more not in k_minus1_features:
+                    model_name_k = " ".join(sorted(k_minus1_features | {one_more}))
+                    pd[one_more].append(model_rsquares[model_name_k] - model_r2)
+                    pd_comp_dom[one_more].update({
+                        model_name: model_rsquares[model_name_k] - model_r2
                     })
 
         return pd, pd_comp_dom
@@ -239,7 +232,7 @@ class Dominance:
                 for features_model_sizes in model_combinations:
                     for x in features_model_sizes:
                         x = list(x)
-                        model_name = ' '.join(x)
+                        model_name = ' '.join(sorted(x))
 
                         results.append(pool.apply_async(
                             train_linear_model, (model_name, self.data, x, self.target, self.sample_weight)))
@@ -318,7 +311,7 @@ class Dominance:
         model_combinations_by_size = defaultdict(list)
         for i in self.model_features_combination(columns):
             for j in i:
-                model_combinations_by_size[len(j)].append(j)
+                model_combinations_by_size[len(j)].append(sorted(j))
 
         for k in tqdm(range(len(columns), 1, -1), desc='Dominance stats'):
             model_features_k = model_combinations_by_size[k]
