@@ -459,7 +459,7 @@ class Dominance:
             iplot(incremental_rsquare_df[['percentage_incremental_r2']].iplot(
                 asFigure=True,
                 kind='pie',
-                title="Percentage Relative Importance for Top %d Variables" + len(self.get_top_k()),
+                title="Percentage Relative Importance for Top %d Variables" % len(self.get_top_k()),
                 values="percentage_incremental_r2"))
         else:
             iplot(incremental_rsquare_df[['incremental_r2']].iplot(
