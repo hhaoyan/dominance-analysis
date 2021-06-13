@@ -240,7 +240,7 @@ class Dominance:
 
                         results.append(pool.apply_async(
                             train_linear_model, (model_name, self.data, x, self.target, self.sample_weight)))
-                for async_result in tqdm(results, desc='Waiting for results'):
+                for async_result in tqdm(results, desc='Training submodels'):
                     model_name, r2 = async_result.get()
                     model_rsquares[model_name] = r2
         else:
@@ -315,7 +315,7 @@ class Dominance:
         model_combinations_by_size = defaultdict(list)
         for i in self.model_features_combination(columns):
             for j in i:
-                model_combinations_by_size[len(i)].append(i)
+                model_combinations_by_size[len(j)].append(j)
 
         for k in tqdm(range(len(columns), 1, -1), desc='Dominance stats'):
             model_features_k = model_combinations_by_size[k]
@@ -579,21 +579,17 @@ class Dominance:
 
     def complete_model_rsquare(self):
         if self.data_format == 0:  # Bala changes
-            print("Selecting %s Best Predictors for the Model" % self.top_k_features)
             columns = self.get_top_k()
-            print("Selected Predictors : ", columns)
-            print()
+            logging.info("Selected Predictors: %s", ", ".join(columns))
 
             if self.objective == OBJECTIVE_REGRESSION:
-                print("*" * 20, " R-Squared of Complete Model : ", "*" * 20)
                 lin_reg = LinearRegression()
                 lin_reg.fit(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
                 r_squared = lin_reg.score(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
                 if self.sample_weight is not None:
-                    print("Weighted R2: %s" % (r_squared))
+                    print("Complete Model Weighted R2: %s" % (r_squared))
                 else:
-                    print("R2: %s" % (r_squared))
-                print()
+                    print("Complete Model R2: %s" % (r_squared))
             else:
                 print("*" * 20, " Pseudo R-Squared of Complete Model : ", "*" * 20)
                 print()
