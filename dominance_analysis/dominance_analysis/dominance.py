@@ -29,8 +29,7 @@ DATA_CORR_MAT = 1
 DATA_COV_MAT = 2
 
 
-def train_linear_model(args):
-    model_name, x, y, weights = args
+def train_linear_model(model_name, x, y, weights):
     lin_reg = LinearRegression(copy_X=True)
     lin_reg.fit(x, y, sample_weight=weights)
     return model_name, lin_reg.score(x, y, sample_weight=weights)
