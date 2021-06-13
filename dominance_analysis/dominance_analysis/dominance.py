@@ -433,11 +433,11 @@ class Dominance:
 
     def plot_incremental_rsquare(self):
         incremental_rsquare_df1 = pd.DataFrame.from_dict(
-            temp_co_domreg.incrimental_r2, orient='index', columns=('incremental_r2',))
+            self.incrimental_r2, orient='index', columns=('incremental_r2',))
         incremental_rsquare_df1.sort_values('incremental_r2', ascending=False, inplace=True)
 
         incremental_rsquare_df2 = pd.DataFrame.from_dict(
-            temp_co_domreg.percentage_incremental_r2, orient='index', columns=('percentage_incremental_r2',))
+            self.percentage_incremental_r2, orient='index', columns=('percentage_incremental_r2',))
         incremental_rsquare_df2.sort_values('percentage_incremental_r2', ascending=False, inplace=True)
 
         incremental_rsquare_df = pd.merge(left=incremental_rsquare_df1, right=incremental_rsquare_df2)
