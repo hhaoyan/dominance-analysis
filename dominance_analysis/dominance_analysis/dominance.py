@@ -1,8 +1,12 @@
-import math
-from itertools import combinations
 import logging
-import numpy as np
+import math
 from collections import defaultdict
+from itertools import combinations
+from multiprocessing import cpu_count
+from multiprocessing.pool import Pool
+
+import cufflinks as cf
+import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from bokeh.io import output_notebook
@@ -15,11 +19,8 @@ from sklearn.datasets import load_breast_cancer
 from sklearn.feature_selection import SelectKBest, chi2, f_regression, f_classif
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
-from multiprocessing.pool import Pool
-from multiprocessing import cpu_count
 
-import cufflinks as cf
-
+assert cf is not None
 output_notebook()
 init_notebook_mode(connected=True)
 
@@ -452,15 +453,14 @@ class Dominance:
                 asFigure=True,
                 kind='bar',
                 title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") +
-                      "R Squared for Top " + str(self.top_k_features) + " Variables ",
+                      ("R Squared for Top %d Variables" % len(self.get_top_k())),
                 yTitle="Incremental R2",
                 xTitle="Estimators"))
             iplot(incremental_rsquare_df[['percentage_incremental_r2']].iplot(
                 asFigure=True,
                 kind='pie',
-                title="Percentage Relative Importance for Top " + str(self.top_k_features) + " Variables ",
-                values="percentage_incremental_r2",
-                labels="Features"))
+                title="Percentage Relative Importance for Top %d Variables" + len(self.get_top_k()),
+                values="percentage_incremental_r2"))
         else:
             iplot(incremental_rsquare_df[['incremental_r2']].iplot(
                 asFigure=True,
