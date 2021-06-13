@@ -116,7 +116,7 @@ class Dominance:
             for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
                 add_k = k_features - k_minus1_features
                 if len(add_k) == 1:
-                    pd[next(add_k)].append(
+                    pd[list(add_k)[0]].append(
                         model_rsquares[" ".join(model_features_k[i])] -
                         model_rsquares[" ".join(model_features_k_minus_1[j])])
 
@@ -126,7 +126,7 @@ class Dominance:
             for j, k_minus1_features in enumerate(model_features_k_minus_1_set):
                 add_k = k_features - k_minus1_features
                 if len(add_k) == 1:
-                    pd_comp_dom[next(add_k)].update({
+                    pd_comp_dom[list(add_k)[0]].update({
                         " ".join(model_features_k_minus_1[j]):
                             model_rsquares[" ".join(model_features_k[i])] -
                             model_rsquares[" ".join(model_features_k_minus_1[j])]
