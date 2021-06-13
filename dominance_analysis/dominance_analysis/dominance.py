@@ -239,7 +239,7 @@ class Dominance:
                         model_name = ' '.join(x)
 
                         results.append(pool.apply_async(
-                            train_linear_model, (model_name, self.data, x, self.target, sample_weights)))
+                            train_linear_model, (model_name, self.data, x, self.target, self.sample_weight)))
                 for async_result in results:
                     model_name, r2 = async_result.get()
                     model_rsquares[model_name] = r2
