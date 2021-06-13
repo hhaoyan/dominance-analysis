@@ -29,7 +29,9 @@ DATA_CORR_MAT = 1
 DATA_COV_MAT = 2
 
 
-def train_linear_model(model_name, x, y, weights):
+def train_linear_model(model_name, data, x, y, weights):
+    x = data[x]
+    y = data[y]
     lin_reg = LinearRegression(copy_X=True)
     lin_reg.fit(x, y, sample_weight=weights)
     return model_name, lin_reg.score(x, y, sample_weight=weights)
@@ -235,12 +237,9 @@ class Dominance:
                     for x in features_model_sizes:
                         x = list(x)
                         model_name = ' '.join(x)
-                        data_x = self.data[x].values
-                        data_y = self.data[self.target].values
-                        sample_weights = self.sample_weight
 
                         results.append(pool.apply_async(
-                            train_linear_model, (model_name, data_x, data_y, sample_weights)))
+                            train_linear_model, (model_name, self.data, x, self.target, sample_weights)))
                 for async_result in results:
                     model_name, r2 = async_result.get()
                     model_rsquares[model_name] = r2
