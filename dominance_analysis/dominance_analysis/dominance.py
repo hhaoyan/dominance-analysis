@@ -18,6 +18,8 @@ from tqdm import tqdm
 from multiprocessing.pool import Pool
 from multiprocessing import cpu_count
 
+import cufflinks as cf
+
 output_notebook()
 init_notebook_mode(connected=True)
 
