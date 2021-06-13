@@ -589,9 +589,9 @@ class Dominance:
                 lin_reg.fit(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
                 r_squared = lin_reg.score(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
                 if self.sample_weight is not None:
-                    print("Complete Model Weighted R2: %s" % (r_squared))
+                    logging.info("Complete Model Weighted R2: %.4f", r_squared)
                 else:
-                    print("Complete Model R2: %s" % (r_squared))
+                    logging.info("Complete Model R2: %.4f", r_squared)
             else:
                 print("*" * 20, " Pseudo R-Squared of Complete Model : ", "*" * 20)
                 print()
