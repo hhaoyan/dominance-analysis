@@ -233,14 +233,14 @@ class Dominance:
         if self.objective == OBJECTIVE_REGRESSION:
             with Pool(processes=cpu_count()) as pool:
                 results = []
-                for features_model_sizes in tqdm(model_combinations):
+                for features_model_sizes in model_combinations:
                     for x in features_model_sizes:
                         x = list(x)
                         model_name = ' '.join(x)
 
                         results.append(pool.apply_async(
                             train_linear_model, (model_name, self.data, x, self.target, self.sample_weight)))
-                for async_result in results:
+                for async_result in tqdm(results, desc='Waiting for results'):
                     model_name, r2 = async_result.get()
                     model_rsquares[model_name] = r2
         else:
