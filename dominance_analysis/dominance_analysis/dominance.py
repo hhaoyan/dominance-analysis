@@ -440,7 +440,9 @@ class Dominance:
             self.percentage_incremental_r2, orient='index', columns=('percentage_incremental_r2',))
         incremental_rsquare_df2.sort_values('percentage_incremental_r2', ascending=False, inplace=True)
 
-        incremental_rsquare_df = pd.merge(left=incremental_rsquare_df1, right=incremental_rsquare_df2)
+        incremental_rsquare_df = pd.merge(
+            left=incremental_rsquare_df1, right=incremental_rsquare_df2,
+            left_index=True, right_index=True)
         incremental_rsquare_df['percentage_incremental_r2'] = incremental_rsquare_df['percentage_incremental_r2'] * 100
 
         if (self.data_format == DATA_XY):
