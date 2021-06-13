@@ -388,12 +388,10 @@ class Dominance:
         return top_k
 
     def plot_waterfall_relative_importance(self, incremental_rsquare_df):
-        index = list(incremental_rsquare_df['Features'].values)
-        data = {'Percentage Relative Importance': list(incremental_rsquare_df['percentage_incremental_r2'].values)}
-        df = pd.DataFrame(data=data, index=index)
+        data = {'Percentage Relative Importance': incremental_rsquare_df['percentage_incremental_r2'].values}
+        df = pd.DataFrame(data=data, index=incremental_rsquare_df.index.values)
 
         net = df['Percentage Relative Importance'].sum()
-        # print("Net ",net)
 
         df['running_total'] = df['Percentage Relative Importance'].cumsum()
         df['y_start'] = df['running_total'] - df['Percentage Relative Importance']
@@ -434,46 +432,45 @@ class Dominance:
         show(p)
 
     def plot_incremental_rsquare(self):
-        incremental_rsquare_df1 = pd.DataFrame()
-        incremental_rsquare_df1['Features'] = self.incrimental_r2.keys()
-        incremental_rsquare_df1['incremental_r2'] = self.incrimental_r2.values()
+        incremental_rsquare_df1 = pandas.DataFrame.from_dict(
+            temp_co_domreg.incrimental_r2, orient='index', columns=('incremental_r2',))
         incremental_rsquare_df1.sort_values('incremental_r2', ascending=False, inplace=True)
 
-        incremental_rsquare_df2 = pd.DataFrame()
-        incremental_rsquare_df2['Features'] = self.percentage_incremental_r2.keys()
-        incremental_rsquare_df2['percentage_incremental_r2'] = self.percentage_incremental_r2.values()
+        incremental_rsquare_df2 = pandas.DataFrame.from_dict(
+            temp_co_domreg.percentage_incremental_r2, orient='index', columns=('percentage_incremental_r2',))
         incremental_rsquare_df2.sort_values('percentage_incremental_r2', ascending=False, inplace=True)
 
         incremental_rsquare_df = pd.merge(left=incremental_rsquare_df1, right=incremental_rsquare_df2)
         incremental_rsquare_df['percentage_incremental_r2'] = incremental_rsquare_df['percentage_incremental_r2'] * 100
-        # Bala changes start
-        if (self.data_format == 0):
-            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(
+
+        if (self.data_format == DATA_XY):
+            iplot(incremental_rsquare_df[['incremental_r2']].iplot(
                 asFigure=True,
                 kind='bar',
                 title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") +
                       "R Squared for Top " + str(self.top_k_features) + " Variables ",
                 yTitle="Incremental R2",
                 xTitle="Estimators"))
-            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(
-                asFigure=True, kind='pie',
+            iplot(incremental_rsquare_df[['percentage_incremental_r2']].iplot(
+                asFigure=True,
+                kind='pie',
                 title="Percentage Relative Importance for Top " + str(self.top_k_features) + " Variables ",
                 values="percentage_incremental_r2",
                 labels="Features"))
         else:
-            iplot(incremental_rsquare_df[['Features', 'incremental_r2']].set_index("Features").iplot(
+            iplot(incremental_rsquare_df[['incremental_r2']].iplot(
                 asFigure=True,
                 kind='bar',
                 title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") + "R Squared of " + " Variables ",
                 yTitle="Incremental R2",
                 xTitle="Estimators"))
-            iplot(incremental_rsquare_df[['Features', 'percentage_incremental_r2']].iplot(
+            iplot(incremental_rsquare_df[['percentage_incremental_r2']].iplot(
                 asFigure=True, kind='pie',
                 title="Percentage Relative Importance of " + " Variables ",
                 values="percentage_incremental_r2",
                 labels="Features"))
-        # Bala changes end#Bala changes end
-        self.plot_waterfall_relative_importance(incremental_rsquare_df[['Features', 'percentage_incremental_r2']])
+
+        self.plot_waterfall_relative_importance(incremental_rsquare_df[['percentage_incremental_r2']])
 
     def predict_general_dominance(self):
         general_dominance = []
