@@ -5,24 +5,48 @@ from itertools import combinations
 from multiprocessing import cpu_count
 from multiprocessing.pool import Pool
 
-import cufflinks as cf
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from bokeh.io import output_notebook
-from bokeh.models import ColumnDataSource, LabelSet
-from bokeh.models.formatters import NumeralTickFormatter
-from bokeh.plotting import figure, show
-from plotly.offline import init_notebook_mode, iplot
-from sklearn.datasets import load_boston
-from sklearn.datasets import load_breast_cancer
 from sklearn.feature_selection import SelectKBest, chi2, f_regression, f_classif
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
 
-assert cf is not None
-output_notebook()
-init_notebook_mode(connected=True)
+_plotting_initialized = False
+
+
+def _init_plotting():
+    global _plotting_initialized
+    if _plotting_initialized:
+        return
+
+    _plotting_initialized = True
+
+    import cufflinks as cf
+    assert cf is not None
+
+    from bokeh.io import output_notebook
+    from plotly.offline import init_notebook_mode
+    output_notebook()
+    init_notebook_mode(connected=True)
+
+
+def iplot(*args, **kwargs):
+    _init_plotting()
+    from plotly.offline import iplot as plotly_iplot
+    return plotly_iplot(*args, **kwargs)
+
+
+def figure(**kwargs):
+    _init_plotting()
+    from bokeh.plotting import figure as bokeh_figure
+    return bokeh_figure(**kwargs)
+
+
+def show(*args, **kwargs):
+    _init_plotting()
+    return show(*args, **kwargs)
+
 
 OBJECTIVE_REGRESSION = 1
 OBJECTIVE_CLASSIFICATION = 0
@@ -55,8 +79,8 @@ class Dominance:
         Args:
             data: Complete Dataset, should be a Pandas DataFrame.
             target: Name of the target variable, it should be present in passed dataset.
-            top_k_features: Number of features to choose from all available features, or list of features
-                to be used.
+            top_k_features: Number of features to choose from all available features, or list
+                of features to be used.
             objective: It can take value either 0 or 1. 0 for Classification and 1 for Regression.
                 By default, the package will run for Regression.
             pseudo_r2: It can take one of the Pseudo R-Squared measures - "mcfadden","nagelkerke",
@@ -75,12 +99,13 @@ class Dominance:
 
         self.data_format = data_format
         if self.data_format == DATA_XY:
-            if (self.objective == OBJECTIVE_CLASSIFICATION):
+            if self.objective == OBJECTIVE_CLASSIFICATION:
                 self.data['intercept'] = 1
 
             if isinstance(top_k_features, int):
-                self.top_k_features = top_k_features if top_k_features else min((len(self.data.columns) - 1), 15)
-                assert self.top_k_features > 1 and self.top_k_features < len(self.data.columns), \
+                self.top_k_features = top_k_features if top_k_features else min(
+                    (len(self.data.columns) - 1), 15)
+                assert 1 < self.top_k_features < len(self.data.columns), \
                     "Value of top_k_features ranges from 1 to n-1 !"
             elif isinstance(top_k_features, list):
                 self.top_k_features = top_k_features
@@ -99,7 +124,9 @@ class Dominance:
 
         self.complete_model_rsquare()
 
-    def conditional_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
+    @staticmethod
+    def conditional_dominance(
+            model_rsquares, model_features_k, model_features_k_minus_1, columns):
         all_features = model_features_k[0]
         total_model_r2 = model_rsquares[" ".join(all_features)]
 
@@ -113,11 +140,13 @@ class Dominance:
             for i in model_features_k_minus_1}
         return interactional_dominance, interactional_comp_dom
 
-    def individual_dominance(self, model_rsquares, model_features, columns):
+    @staticmethod
+    def individual_dominance(model_rsquares, model_features, columns):
         return {" ".join(col): model_rsquares[" ".join(col)]
                 for col in model_features}
 
-    def partial_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1, columns):
+    def partial_dominance(self, model_rsquares, model_features_k, model_features_k_minus_1,
+                          columns):
         pd = {col: [] for col in columns}
         pd_comp_dom = {col: {} for col in columns}
 
@@ -137,7 +166,8 @@ class Dominance:
 
         return pd, pd_comp_dom
 
-    def model_features_combination(self, columns):
+    @staticmethod
+    def model_features_combination(columns):
         return [list(combinations(columns, i)) for i in range(1, len(columns) + 1)]
 
     def McFadden_RSquare(self, columns):
@@ -203,7 +233,7 @@ class Dominance:
         return estrella_rsquare
 
     def Adjusted_McFadden_RSquare(self, columns):
-        log_clf = sm.Logit(self.data[self.target], self.data[cols])
+        log_clf = sm.Logit(self.data[self.target], self.data[columns])
         # result=log_clf.fit(disp=0,method='powell')
         try:
             result = log_clf.fit(disp=0)
@@ -235,7 +265,8 @@ class Dominance:
                         model_name = ' '.join(sorted(x))
 
                         results.append(pool.apply_async(
-                            train_linear_model, (model_name, self.data, x, self.target, self.sample_weight)))
+                            train_linear_model,
+                            (model_name, self.data, x, self.target, self.sample_weight)))
                 for async_result in tqdm(results, desc='Training submodels'):
                     model_name, r2 = async_result.get()
                     model_rsquares[model_name] = r2
@@ -243,17 +274,17 @@ class Dominance:
             for i in tqdm(model_combinations):
                 for j in i:
                     train_features = list(j)
-                    if (self.pseudo_r2 == 'mcfadden'):
+                    if self.pseudo_r2 == 'mcfadden':
                         # print("mcfadden")
                         r_squared = self.McFadden_RSquare(train_features)
                     # elif(self.pseudo_r2=='adjusted_mcfadden'):
                     # 	r_squared=self.Adjusted_McFadden_RSquare(train_features)
-                    elif (self.pseudo_r2 == 'nagelkerke'):
+                    elif self.pseudo_r2 == 'nagelkerke':
                         # print("nagelkerke")
                         r_squared = self.Nagelkerke_Rsquare(train_features)
-                    elif (self.pseudo_r2 == 'cox_and_snell'):
+                    elif self.pseudo_r2 == 'cox_and_snell':
                         r_squared = self.Cox_and_Snell_Rsquare(train_features)
-                    elif (self.pseudo_r2 == 'estrella'):
+                    elif self.pseudo_r2 == 'estrella':
                         r_squared = self.Estrella(train_features)
                     model_rsquares[" ".join(train_features)] = r_squared
 
@@ -290,7 +321,8 @@ class Dominance:
 
         incrimental_r2 = {}
         for col in columns:
-            l = [variable_stats[col]['individual_dominance'], variable_stats[col]['conditional_dominance']]
+            l = [variable_stats[col]['individual_dominance'],
+                 variable_stats[col]['conditional_dominance']]
             l.extend(variable_stats[col]['partial_dominance'])
             incrimental_r2[col] = np.mean(l)
 
@@ -353,10 +385,14 @@ class Dominance:
         tf['Interactional Dominance'] = tf['conditional_dominance']
         tf['Average Partial Dominance'] = tf['partial_dominance'].apply(lambda x: np.mean(x))
         tf['partial_dominance_count'] = tf['partial_dominance'].apply(lambda x: len(x))
-        tf['Total Dominance'] = (tf['partial_dominance_count'] * tf['Average Partial Dominance'] + tf[
-            'conditional_dominance'] + tf['individual_dominance']) / (tf['partial_dominance_count'] + 2)
-        tf['Percentage Relative Importance'] = (tf['Total Dominance'] * 100) / tf['Total Dominance'].sum()
-        tf = tf[['Interactional Dominance', 'individual_dominance', 'Average Partial Dominance', 'Total Dominance',
+        tf['Total Dominance'] = (tf['partial_dominance_count'] * tf['Average Partial Dominance'] +
+                                 tf[
+                                     'conditional_dominance'] + tf['individual_dominance']) / (
+                                        tf['partial_dominance_count'] + 2)
+        tf['Percentage Relative Importance'] = (tf['Total Dominance'] * 100) / tf[
+            'Total Dominance'].sum()
+        tf = tf[['Interactional Dominance', 'individual_dominance', 'Average Partial Dominance',
+                 'Total Dominance',
                  'Percentage Relative Importance']].sort_values("Total Dominance", ascending=False)
         tf.rename(columns={"individual_dominance": "Individual Dominance"}, inplace=True)
         return tf
@@ -384,7 +420,11 @@ class Dominance:
         return top_k
 
     def plot_waterfall_relative_importance(self, incremental_rsquare_df):
-        data = {'Percentage Relative Importance': incremental_rsquare_df['percentage_incremental_r2'].values}
+        from bokeh.models import ColumnDataSource, LabelSet
+        from bokeh.models.formatters import NumeralTickFormatter
+
+        data = {'Percentage Relative Importance': incremental_rsquare_df[
+            'percentage_incremental_r2'].values}
         df = pd.DataFrame(data=data, index=incremental_rsquare_df.index.values)
 
         net = df['Percentage Relative Importance'].sum()
@@ -395,7 +435,8 @@ class Dominance:
         df['label_pos'] = df['running_total']
 
         df_net = pd.DataFrame.from_records([(net, net, 0, net)],
-                                           columns=['Percentage Relative Importance', 'running_total', 'y_start',
+                                           columns=['Percentage Relative Importance',
+                                                    'running_total', 'y_start',
                                                     'label_pos'], index=["net"])
 
         df = df.append(df_net)
@@ -434,12 +475,14 @@ class Dominance:
 
         incremental_rsquare_df2 = pd.DataFrame.from_dict(
             self.percentage_incremental_r2, orient='index', columns=('percentage_incremental_r2',))
-        incremental_rsquare_df2.sort_values('percentage_incremental_r2', ascending=False, inplace=True)
+        incremental_rsquare_df2.sort_values('percentage_incremental_r2', ascending=False,
+                                            inplace=True)
 
         incremental_rsquare_df = pd.merge(
             left=incremental_rsquare_df1, right=incremental_rsquare_df2,
             left_index=True, right_index=True)
-        incremental_rsquare_df['percentage_incremental_r2'] = incremental_rsquare_df['percentage_incremental_r2'] * 100
+        incremental_rsquare_df['percentage_incremental_r2'] = incremental_rsquare_df[
+                                                                  'percentage_incremental_r2'] * 100
 
         if (self.data_format == DATA_XY):
             iplot(incremental_rsquare_df[['incremental_r2']].iplot(
@@ -459,7 +502,8 @@ class Dominance:
             iplot(incremental_rsquare_df[['incremental_r2']].iplot(
                 asFigure=True,
                 kind='bar',
-                title="Incremetal " + ("Pseudo " if self.objective != 1 else " ") + "R Squared of " + " Variables ",
+                title="Incremetal " + (
+                    "Pseudo " if self.objective != 1 else " ") + "R Squared of " + " Variables ",
                 yTitle="Incremental R2",
                 xTitle="Estimators"))
             iplot(incremental_rsquare_df[['percentage_incremental_r2']].iplot(
@@ -468,7 +512,8 @@ class Dominance:
                 values="percentage_incremental_r2",
                 labels="Features"))
 
-        self.plot_waterfall_relative_importance(incremental_rsquare_df[['percentage_incremental_r2']])
+        self.plot_waterfall_relative_importance(
+            incremental_rsquare_df[['percentage_incremental_r2']])
 
     def predict_general_dominance(self):
         general_dominance = []
@@ -491,15 +536,18 @@ class Dominance:
             cd = True
             if (len(x['Dominating']) > 0):
                 for j in x['Dominating']:
-                    if ((self.variable_stats[predictor]['individual_dominance'] < self.variable_stats[j][
-                        'individual_dominance']) or (
-                            self.variable_stats[predictor]['conditional_dominance'] < self.variable_stats[j][
-                        'conditional_dominance'])):
+                    if ((self.variable_stats[predictor]['individual_dominance'] <
+                         self.variable_stats[j][
+                             'individual_dominance']) or (
+                            self.variable_stats[predictor]['conditional_dominance'] <
+                            self.variable_stats[j][
+                                'conditional_dominance'])):
                         cd = False
                         break
 
                     if (cd):
-                        for index, i in enumerate(self.variable_stats[predictor]['partial_dominance']):
+                        for index, i in enumerate(
+                                self.variable_stats[predictor]['partial_dominance']):
                             if (i < self.variable_stats[j]['partial_dominance'][index]):
                                 cd = False
                                 break
@@ -508,17 +556,20 @@ class Dominance:
 
             if (cd):
                 conditinal_dominance.append(
-                    {"Predictors": predictor, "Conditional Dominance": True, "Dominating": x['Dominating']})
+                    {"Predictors": predictor, "Conditional Dominance": True,
+                     "Dominating": x['Dominating']})
             else:
                 conditinal_dominance.append(
                     {"Predictors": predictor, "Conditional Dominance": False, "Dominating": None})
 
-        return pd.DataFrame(conditinal_dominance)[['Predictors', 'Conditional Dominance', 'Dominating']]
+        return pd.DataFrame(conditinal_dominance)[
+            ['Predictors', 'Conditional Dominance', 'Dominating']]
 
     def predict_complete_dominance(self):
         conditional_dominance_df = self.predict_conditional_dominance()
         conditional_dominant_predictors = list(
-            conditional_dominance_df[conditional_dominance_df['Conditional Dominance'] == True]['Predictors'].values)
+            conditional_dominance_df[conditional_dominance_df['Conditional Dominance'] == True][
+                'Predictors'].values)
         predictors = list(conditional_dominance_df['Predictors'].values)
 
         # print(conditional_dominant_predictors,predictors)
@@ -530,7 +581,8 @@ class Dominance:
 
         for i in conditional_dominant_predictors:
             # print(i,conditional_dominance_df)
-            dominating = conditional_dominance_df[conditional_dominance_df['Predictors'] == i]['Dominating'].values[0]
+            dominating = conditional_dominance_df[conditional_dominance_df['Predictors'] == i][
+                'Dominating'].values[0]
             complete_dominance = True
             for j in [p for p in list(cds.keys()) if p != 'interactional_dominance']:
                 if (j == 'individual_dominance'):
@@ -569,7 +621,8 @@ class Dominance:
         comp_dom.rename(columns={'Dominating': 'Completelly Dominating'}, inplace=True)
 
         return pd.merge(
-            pd.merge(left=gen_dom, right=condition_dom[['Predictors', 'Conditionally Dominating']], how='left'),
+            pd.merge(left=gen_dom, right=condition_dom[['Predictors', 'Conditionally Dominating']],
+                     how='left'),
             comp_dom, how='left').fillna("")
 
     def complete_model_rsquare(self):
@@ -579,8 +632,10 @@ class Dominance:
 
             if self.objective == OBJECTIVE_REGRESSION:
                 lin_reg = LinearRegression()
-                lin_reg.fit(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
-                r_squared = lin_reg.score(self.data[columns], self.data[self.target], sample_weight=self.sample_weight)
+                lin_reg.fit(self.data[columns], self.data[self.target],
+                            sample_weight=self.sample_weight)
+                r_squared = lin_reg.score(self.data[columns], self.data[self.target],
+                                          sample_weight=self.sample_weight)
                 if self.sample_weight is not None:
                     logging.info("Complete Model Weighted R2: %.4f", r_squared)
                 else:
@@ -589,18 +644,18 @@ class Dominance:
                 print("*" * 20, " Pseudo R-Squared of Complete Model : ", "*" * 20)
                 print()
 
-                if (self.pseudo_r2 == 'mcfadden'):
+                if self.pseudo_r2 == 'mcfadden':
                     print("MacFadden's R-Squared : %s " % (self.McFadden_RSquare(columns)))
-                elif (pseudo_r2 == 'nagelkerke'):
+                elif self.pseudo_r2 == 'nagelkerke':
                     print("Nagelkerke R-Squared : %s " % (self.Nagelkerke_Rsquare(columns)))
-                elif (pseudo_r2 == 'cox_and_snell'):
+                elif self.pseudo_r2 == 'cox_and_snell':
                     print("Cox and Snell R-Squared : %s " % (self.Cox_and_Snell_Rsquare(columns)))
                 else:
                     print("Estrella R-Squared : %s " % (self.Estrella(columns)))
                 print()
         # Bala changes start
         else:
-            if (self.data_format == 2):
+            if self.data_format == 2:
                 columns = list(self.data.columns.values)
                 d = np.sqrt(self.data.values.diagonal())
                 corr_array = ((self.data.values.T / d).T) / d
@@ -611,7 +666,8 @@ class Dominance:
             columns.remove(self.target)
             corr_all_matrix = self.data.loc[columns, [self.target]]
             corr_pred_matrix = self.data.loc[columns, columns]
-            corr_pred_matrix_inverse = pd.DataFrame(np.linalg.pinv(corr_pred_matrix.values), corr_pred_matrix.columns,
+            corr_pred_matrix_inverse = pd.DataFrame(np.linalg.pinv(corr_pred_matrix.values),
+                                                    corr_pred_matrix.columns,
                                                     corr_pred_matrix.index)
             beta = corr_pred_matrix_inverse.dot(corr_all_matrix)
             corr_all_matrix_transpose = corr_all_matrix.transpose()
@@ -623,13 +679,14 @@ class Dominance:
 
     # Bala changes starts
     def Dominance_correlation(self):
-        ## Calculating Incremental R2 from Correlation Matrix
+        """Calculating Incremental R2 from Correlation Matrix"""
         columns = list(self.data.columns.values)
         columns.remove(self.target)
         print("Predictors : ", columns)
         print()
 
-        print("Calculating R2 for %s possible combinations of %s features :" % ((2 ** len(columns)) - 1, len(columns)))
+        print("Calculating R2 for %s possible combinations of %s features :" % (
+            (2 ** len(columns)) - 1, len(columns)))
         model_combinations = self.model_features_combination(columns)
         model_rsquares = {}
         for i in tqdm(model_combinations):
@@ -638,7 +695,8 @@ class Dominance:
                 corr_all_matrix = self.data.loc[model_combinations, [self.target]]
                 corr_pred_matrix = self.data.loc[model_combinations, model_combinations]
                 corr_pred_matrix_inverse = pd.DataFrame(np.linalg.pinv(corr_pred_matrix.values),
-                                                        corr_pred_matrix.columns, corr_pred_matrix.index)
+                                                        corr_pred_matrix.columns,
+                                                        corr_pred_matrix.index)
                 beta = corr_pred_matrix_inverse.dot(corr_all_matrix)
                 corr_all_matrix_transpose = corr_all_matrix.transpose()
                 r_square = corr_all_matrix_transpose.dot(beta)
@@ -654,23 +712,27 @@ class Dominance_Datasets:
 
     @classmethod
     def get_breast_cancer(cls):
-        print(
-            """The copy of UCI ML Breast Cancer Wisconsin (Diagnostic) dataset is downloaded from: https://goo.gl/U2Uwz2""")
-        print("""Internally using load_breast_cancer function from sklearn.datasets """)
+        from sklearn.datasets import load_breast_cancer
+        print("The copy of UCI ML Breast Cancer Wisconsin (Diagnostic) "
+              "dataset is downloaded from: https://goo.gl/U2Uwz2")
+        print("Internally using load_breast_cancer function from sklearn.datasets")
         breast_cancer_data = pd.DataFrame(data=load_breast_cancer()['data'],
                                           columns=load_breast_cancer()['feature_names'])
         breast_cancer_data['target'] = load_breast_cancer()['target']
         target_dict = dict(
-            {j for i, j in zip(load_breast_cancer()['target_names'], enumerate(load_breast_cancer()['target_names']))})
+            {j for i, j in zip(load_breast_cancer()['target_names'],
+                               enumerate(load_breast_cancer()['target_names']))})
         breast_cancer_data['target_names'] = breast_cancer_data['target'].map(target_dict)
         return breast_cancer_data.iloc[:, :-1]
 
     @classmethod
     def get_boston(cls):
-        print(
-            """The copy of Boston Housing Dataset is downloaded from: https://www.cs.toronto.edu/~delve/data/boston/bostonDetail.html""")
-        print("""Internally using load_boston function from sklearn.datasets """)
-        boston_data = pd.DataFrame(data=load_boston()['data'], columns=load_boston()['feature_names'])
+        from sklearn.datasets import load_boston
+        print("The copy of Boston Housing Dataset is downloaded from: "
+              "https://www.cs.toronto.edu/~delve/data/boston/bostonDetail.html")
+        print("Internally using load_boston function from sklearn.datasets")
+        boston_data = pd.DataFrame(data=load_boston()['data'],
+                                   columns=load_boston()['feature_names'])
         boston_data['House_Price'] = load_boston()['target']
         return boston_data
 

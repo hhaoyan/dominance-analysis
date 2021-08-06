@@ -1,4 +1,5 @@
 from dominance_analysis.dominance import *
 
+
 def test_package_function():
-	return "Dominance Analysis Package"
+    return "Dominance Analysis Package"
