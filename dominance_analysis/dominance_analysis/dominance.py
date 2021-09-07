@@ -401,7 +401,8 @@ class Dominance:
         if isinstance(self.top_k_features, list):
             return self.top_k_features
 
-        columns = [x for x in self.data.columns.values if x != self.target]
+        columns = [x for x in self.data.columns.values
+                   if x != self.target and len(self.data[x].unique()) > 1]
         # remove intercept from top_k
         if self.objective == OBJECTIVE_REGRESSION:
             top_k_vars = SelectKBest(f_regression, k=self.top_k_features)
